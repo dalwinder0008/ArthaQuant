@@ -109,6 +109,17 @@ bun run dev
 
 This starts the same server in production mode, serving `dist/` and the API on port `3000`. Keep the environment variable and command in the same terminal session.
 
+## Deploy to Vercel
+
+The repository includes Vercel Node.js functions for `/api/health`, `/api/market-data`, and `/api/news-sentiment`, alongside the Vite frontend. The Vercel functions share the market/news logic with the local Express server. Vercel's filesystem is not a persistent cache, so deployed market caching is in-memory and best-effort per function instance.
+
+1. Push the repository to GitHub and import it in the Vercel dashboard using **Add New → Project**.
+2. Keep the project root at the repository root. `vercel.json` configures the Vite framework, `npm install`, `npm run build`, and the `dist` output directory.
+3. Before production use, set up your Firebase project, deploy and verify `firestore.rules`, and add your Vercel deployment domain(s) to Firebase Authentication's authorized domains. Configure Gmail OAuth/API access only if you want the optional email import.
+4. Deploy. Verify the deployment by opening `/api/health` on your Vercel URL, then open the app and check that market data loads. `/api/market-data` and `/api/news-sentiment` can also be opened directly to inspect their JSON responses.
+
+The market endpoints do not require a Gemini key. Firebase client configuration and Firestore rules must belong to the Firebase project you intend to use; Vercel deployment does not automatically configure Firebase.
+
 ## Firebase and optional Gmail setup
 
 1. Configure the Firebase web app settings in `firebase-applet-config.json` for your Firebase project (including its Firestore database ID).
@@ -130,7 +141,9 @@ src/
   pages/        Dashboard views
   services/     Market data, news, and trade import integrations
 tests/          Engine tests
+api/            Vercel serverless API endpoints
 server.ts       Express API and development/production server
+vercel.json     Vercel build configuration
 firestore.rules Firestore access-control rules
 ```
 

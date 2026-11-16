@@ -2,7 +2,6 @@ import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createServer as createViteServer } from 'vite';
 import { ASSET_UNIVERSE } from './src/engine/universe.ts';
 import type { PriceBar, RawMarketPayload, SentimentItem } from './src/engine/types.ts';
 
@@ -391,6 +390,58 @@ async function fetchNewsRSS(): Promise<{ items: SentimentItem[]; sourceMode: str
   return { items: buildFallbackNews(), sourceMode: 'cached-fallback', fetchedAt: new Date().toISOString() };
 }
 
+export async function getMarketData(force = false): Promise<RawMarketPayload> {
+  const now = Date.now();
+
+  if (!force && memMarketCache && now - memMarketCache.ts < MARKET_TTL_MS) {
+    return memMarketCache.data;
+  }
+
+  if (!force && process.env.VERCEL !== '1' && !memMarketCache && fs.existsSync(MARKET_CACHE_FILE)) {
+    try {
+      const disk = JSON.parse(fs.readFileSync(MARKET_CACHE_FILE, 'utf8')) as {
+        ts: number;
+        data: RawMarketPayload;
+      };
+      if (now - disk.ts < MARKET_TTL_MS) {
+        memMarketCache = disk;
+        return disk.data;
+      }
+    } catch {
+      // Ignore corrupt disk cache
+    }
+  }
+
+  const payload = await fetchLiveMarketData();
+  memMarketCache = { ts: now, data: payload };
+
+  if (process.env.VERCEL !== '1') {
+    try {
+      ensureCacheDir();
+      fs.writeFileSync(MARKET_CACHE_FILE, JSON.stringify(memMarketCache));
+    } catch {
+      // Non-fatal cache write failure
+    }
+  }
+
+  return payload;
+}
+
+export async function getNewsSentiment(): Promise<{
+  items: SentimentItem[];
+  sourceMode: string;
+  fetchedAt: string;
+}> {
+  const now = Date.now();
+  if (memNewsCache && now - memNewsCache.ts < NEWS_TTL_MS) {
+    return memNewsCache.data;
+  }
+
+  const payload = await fetchNewsRSS();
+  memNewsCache = { ts: now, data: payload };
+  return payload;
+}
+
 async function startServer() {
   const app = express();
   app.use(express.json());
@@ -400,53 +451,15 @@ async function startServer() {
   });
 
   app.get('/api/market-data', async (req, res) => {
-    const force = req.query.refresh === '1';
-    const now = Date.now();
-
-    if (!force && memMarketCache && now - memMarketCache.ts < MARKET_TTL_MS) {
-      res.json(memMarketCache.data);
-      return;
-    }
-
-    if (!force && !memMarketCache && fs.existsSync(MARKET_CACHE_FILE)) {
-      try {
-        const disk = JSON.parse(fs.readFileSync(MARKET_CACHE_FILE, 'utf8')) as {
-          ts: number;
-          data: RawMarketPayload;
-        };
-        if (now - disk.ts < MARKET_TTL_MS) {
-          memMarketCache = disk;
-          res.json(disk.data);
-          return;
-        }
-      } catch {
-        // Ignore corrupt disk cache
-      }
-    }
-
-    const payload = await fetchLiveMarketData();
-    memMarketCache = { ts: now, data: payload };
-    try {
-      ensureCacheDir();
-      fs.writeFileSync(MARKET_CACHE_FILE, JSON.stringify(memMarketCache));
-    } catch {
-      // Non-fatal cache write failure
-    }
-    res.json(payload);
+    res.json(await getMarketData(req.query.refresh === '1'));
   });
 
   app.get('/api/news-sentiment', async (_req, res) => {
-    const now = Date.now();
-    if (memNewsCache && now - memNewsCache.ts < NEWS_TTL_MS) {
-      res.json(memNewsCache.data);
-      return;
-    }
-    const payload = await fetchNewsRSS();
-    memNewsCache = { ts: now, data: payload };
-    res.json(payload);
+    res.json(await getNewsSentiment());
   });
 
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
@@ -460,10 +473,16 @@ async function startServer() {
     });
   }
 
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`ArthaQuant server running on http://localhost:${PORT}`);
   });
 }
 
-startServer();
+const isDirectExecution =
+  process.argv[1] !== undefined &&
+  path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
+
+if (isDirectExecution) {
+  void startServer();
+}
