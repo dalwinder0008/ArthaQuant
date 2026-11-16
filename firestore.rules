@@ -1,0 +1,185 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Reusable primitive helpers
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedOwner(userId) {
+      return isSignedIn()
+        && request.auth.uid == userId
+        && request.auth.token.email_verified == true;
+    }
+
+    function isValidDateStr(s) {
+      return s is string && s.size() == 10 && s.matches('^\\d{4}-\\d{2}-\\d{2}$');
+    }
+
+    function parentUserExists(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId))
+        || existsAfter(/databases/$(database)/documents/users/$(userId));
+    }
+
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll(['uid', 'displayName', 'email', 'riskProfile', 'seededStarter', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'displayName', 'email', 'riskProfile', 'seededStarter', 'createdAt', 'updatedAt'])
+        && data.uid is string && data.uid == userId && isValidId(data.uid)
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 254
+        && data.riskProfile in ['Conservative', 'Balanced', 'Aggressive']
+        && data.seededStarter is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidHolding(data, userId, holdingId) {
+      return data.keys().hasAll(['id', 'userId', 'ticker', 'name', 'assetClass', 'currency', 'quantity', 'buyPrice', 'buyDate', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'userId', 'ticker', 'name', 'assetClass', 'currency', 'quantity', 'buyPrice', 'buyDate', 'notes', 'createdAt', 'updatedAt'])
+        && data.id is string && data.id == holdingId && isValidId(data.id)
+        && data.userId is string && data.userId == userId && isValidId(data.userId)
+        && data.ticker is string && data.ticker.size() >= 1 && data.ticker.size() <= 32 && data.ticker.matches('^[A-Z0-9.=\\-\\^]+$')
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 100
+        && data.assetClass in ['Equity', 'Gold', 'Crypto', 'REIT', 'Safe']
+        && data.currency in ['INR', 'USD']
+        && (data.quantity is int || data.quantity is float) && data.quantity > 0 && data.quantity <= 1000000000
+        && (data.buyPrice is int || data.buyPrice is float) && data.buyPrice > 0 && data.buyPrice <= 1000000000
+        && isValidDateStr(data.buyDate)
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 240))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidManualAsset(data, userId, assetId) {
+      return data.keys().hasAll(['id', 'userId', 'name', 'category', 'currentValue', 'purchaseValue', 'growthPct', 'rentalYieldPct', 'asOfDate', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'userId', 'name', 'category', 'currentValue', 'purchaseValue', 'growthPct', 'rentalYieldPct', 'asOfDate', 'createdAt', 'updatedAt'])
+        && data.id is string && data.id == assetId && isValidId(data.id)
+        && data.userId is string && data.userId == userId && isValidId(data.userId)
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 100
+        && data.category in ['Residential Real Estate', 'Commercial Real Estate', 'Land / Plot', 'Other Real Asset']
+        && (data.currentValue is int || data.currentValue is float) && data.currentValue > 0 && data.currentValue <= 100000000000
+        && (data.purchaseValue is int || data.purchaseValue is float) && data.purchaseValue > 0 && data.purchaseValue <= 100000000000
+        && (data.growthPct is int || data.growthPct is float) && data.growthPct >= -50 && data.growthPct <= 100
+        && (data.rentalYieldPct is int || data.rentalYieldPct is float) && data.rentalYieldPct >= 0 && data.rentalYieldPct <= 50
+        && isValidDateStr(data.asOfDate)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAlertRule(data, userId, alertId) {
+      return data.keys().hasAll(['id', 'userId', 'ruleType', 'target', 'threshold', 'active', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'userId', 'ruleType', 'target', 'threshold', 'active', 'createdAt', 'updatedAt'])
+        && data.id is string && data.id == alertId && isValidId(data.id)
+        && data.userId is string && data.userId == userId && isValidId(data.userId)
+        && data.ruleType in ['CRYPTO_WEIGHT_MAX', 'ASSET_WEIGHT_MAX', 'PORTFOLIO_VOL_MAX', 'REGIME_BEAR', 'ANOMALY_HELD', 'CORRELATION_SPIKE']
+        && data.target is string && data.target.size() >= 1 && data.target.size() <= 64
+        && (data.threshold is int || data.threshold is float) && data.threshold >= 0 && data.threshold <= 1000
+        && data.active is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // User profile & subcollections
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isVerifiedOwner(userId);
+      allow list: if false;
+      allow create: if isValidId(userId)
+        && isVerifiedOwner(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(userId)
+        && isVerifiedOwner(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().email == existing().email
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'riskProfile', 'seededStarter', 'updatedAt']);
+      allow delete: if false;
+
+      match /holdings/{holdingId} {
+        allow get: if isValidId(userId) && isValidId(holdingId) && isVerifiedOwner(userId);
+        allow list: if isVerifiedOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isValidId(userId)
+          && isValidId(holdingId)
+          && isVerifiedOwner(userId)
+          && isValidHolding(incoming(), userId, holdingId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && parentUserExists(userId);
+        allow update: if isValidId(userId)
+          && isValidId(holdingId)
+          && isVerifiedOwner(userId)
+          && isValidHolding(incoming(), userId, holdingId)
+          && incoming().id == existing().id
+          && incoming().userId == existing().userId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['quantity', 'buyPrice', 'buyDate', 'notes', 'updatedAt']);
+        allow delete: if isValidId(userId) && isValidId(holdingId) && isVerifiedOwner(userId);
+      }
+
+      match /manualAssets/{assetId} {
+        allow get: if isValidId(userId) && isValidId(assetId) && isVerifiedOwner(userId);
+        allow list: if isVerifiedOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isValidId(userId)
+          && isValidId(assetId)
+          && isVerifiedOwner(userId)
+          && isValidManualAsset(incoming(), userId, assetId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && parentUserExists(userId);
+        allow update: if isValidId(userId)
+          && isValidId(assetId)
+          && isVerifiedOwner(userId)
+          && isValidManualAsset(incoming(), userId, assetId)
+          && incoming().id == existing().id
+          && incoming().userId == existing().userId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'category', 'currentValue', 'purchaseValue', 'growthPct', 'rentalYieldPct', 'asOfDate', 'updatedAt']);
+        allow delete: if isValidId(userId) && isValidId(assetId) && isVerifiedOwner(userId);
+      }
+
+      match /alerts/{alertId} {
+        allow get: if isValidId(userId) && isValidId(alertId) && isVerifiedOwner(userId);
+        allow list: if isVerifiedOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isValidId(userId)
+          && isValidId(alertId)
+          && isVerifiedOwner(userId)
+          && isValidAlertRule(incoming(), userId, alertId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && parentUserExists(userId);
+        allow update: if isValidId(userId)
+          && isValidId(alertId)
+          && isVerifiedOwner(userId)
+          && isValidAlertRule(incoming(), userId, alertId)
+          && incoming().id == existing().id
+          && incoming().userId == existing().userId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['target', 'threshold', 'active', 'updatedAt']);
+        allow delete: if isValidId(userId) && isValidId(alertId) && isVerifiedOwner(userId);
+      }
+    }
+  }
+}
