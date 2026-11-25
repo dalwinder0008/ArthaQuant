@@ -2,6 +2,15 @@ import React, { useState } from 'react';
 import { Download, FileSpreadsheet, Plus, ShieldAlert, Trash2 } from 'lucide-react';
 import type { AlertRule, AlertRuleType, TriggeredAlert } from '../engine/types.ts';
 
+const RULE_LABELS: Record<AlertRuleType, string> = {
+  CRYPTO_WEIGHT_MAX: 'Crypto Weight Limit (%)',
+  ASSET_WEIGHT_MAX: 'Single Asset Limit (%)',
+  PORTFOLIO_VOL_MAX: 'Yearly Volatility Limit (%)',
+  REGIME_BEAR: 'Bear Market Alert (%)',
+  ANOMALY_HELD: 'Unusual Move Alert (σ)',
+  CORRELATION_SPIKE: 'Crypto–Nifty Link Limit',
+};
+
 export function AlertsPage({
   rules,
   triggered,
@@ -45,9 +54,9 @@ export function AlertsPage({
       <div className="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Portfolio Advisory Reports & Data Export</h2>
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Reports &amp; Downloads</h2>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              Generate a multi-section PDF advisory report (holdings, P&L, risk attribution, HMM regime, trade plan) or download raw holdings CSV.
+              Download your full portfolio summary as a PDF report or export holdings to CSV.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
@@ -73,10 +82,12 @@ export function AlertsPage({
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
           <h2 className="mb-4 text-sm font-semibold text-slate-900 dark:text-slate-100">
-            Active Triggered Alerts ({triggered.length})
+            Active Alerts ({triggered.length})
           </h2>
           {triggered.length === 0 ? (
-            <p className="text-xs text-slate-500 dark:text-slate-400">No rules are currently breached.</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              All clear — none of your alert limits are currently crossed.
+            </p>
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-slate-800">
               {triggered.map((t) => (
@@ -88,9 +99,7 @@ export function AlertsPage({
                       }`}
                     />
                     <div>
-                      <div className="text-xs font-semibold text-slate-900 dark:text-slate-100">
-                        [{t.severity}] {t.title}
-                      </div>
+                      <div className="text-xs font-semibold text-slate-900 dark:text-slate-100">{t.title}</div>
                       <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{t.detail}</div>
                     </div>
                   </div>
@@ -107,10 +116,10 @@ export function AlertsPage({
           onSubmit={handleSubmit}
           className="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900"
         >
-          <h2 className="mb-4 text-sm font-semibold text-slate-900 dark:text-slate-100">Create Alert Rule</h2>
+          <h2 className="mb-4 text-sm font-semibold text-slate-900 dark:text-slate-100">New Alert Rule</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Rule Type</label>
+              <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Alert Condition</label>
               <select
                 value={ruleType}
                 onChange={(e) => {
@@ -120,16 +129,16 @@ export function AlertsPage({
                     setTarget('Crypto');
                     setThreshold('20');
                   } else if (val === 'PORTFOLIO_VOL_MAX') {
-                    setTarget('Portfolio Volatility');
+                    setTarget('Portfolio Risk');
                     setThreshold('18');
                   } else if (val === 'REGIME_BEAR') {
-                    setTarget('NIFTY 50 HMM');
+                    setTarget('Market Phase');
                     setThreshold('60');
                   } else if (val === 'ANOMALY_HELD') {
-                    setTarget('Held Assets');
+                    setTarget('Owned Assets');
                     setThreshold('2.0');
                   } else if (val === 'CORRELATION_SPIKE') {
-                    setTarget('BTC-USD vs ^NSEI');
+                    setTarget('BTC vs NIFTY');
                     setThreshold('0.55');
                   } else {
                     setTarget('RELIANCE.NS');
@@ -138,17 +147,17 @@ export function AlertsPage({
                 }}
                 className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
               >
-                <option value="CRYPTO_WEIGHT_MAX">Crypto Weight Above Cap (%)</option>
-                <option value="ASSET_WEIGHT_MAX">Single Asset Weight Above Cap (%)</option>
-                <option value="PORTFOLIO_VOL_MAX">Annualized Portfolio Volatility Above (%)</option>
-                <option value="REGIME_BEAR">Bear Market Regime Probability Above (%)</option>
-                <option value="ANOMALY_HELD">Isolation Forest Anomaly on Held Asset (σ)</option>
-                <option value="CORRELATION_SPIKE">BTC–Nifty 90D Correlation Spike Above</option>
+                <option value="CRYPTO_WEIGHT_MAX">Crypto goes above (%)</option>
+                <option value="ASSET_WEIGHT_MAX">Single asset goes above (%)</option>
+                <option value="PORTFOLIO_VOL_MAX">Yearly risk goes above (%)</option>
+                <option value="REGIME_BEAR">Bear market chance goes above (%)</option>
+                <option value="ANOMALY_HELD">Unusual price/volume jump (σ)</option>
+                <option value="CORRELATION_SPIKE">BTC–Nifty link goes above</option>
               </select>
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Target Scope</label>
+              <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Target</label>
               <input
                 type="text"
                 required
@@ -159,7 +168,7 @@ export function AlertsPage({
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Threshold</label>
+              <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Limit Value</label>
               <input
                 type="number"
                 step="any"
@@ -179,7 +188,7 @@ export function AlertsPage({
               className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-4 py-2 text-xs font-medium text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 whitespace-nowrap shrink-0"
             >
               <Plus className="h-3.5 w-3.5" />
-              <span>{saving ? 'Adding...' : 'Save Rule'}</span>
+              <span>{saving ? 'Saving...' : 'Save Rule'}</span>
             </button>
           </div>
         </form>
@@ -187,22 +196,24 @@ export function AlertsPage({
 
       {/* Configured Rules Table */}
       <div className="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-        <h2 className="mb-3 text-sm font-semibold text-slate-900 dark:text-slate-100">Configured Alert Rules</h2>
+        <h2 className="mb-3 text-sm font-semibold text-slate-900 dark:text-slate-100">Your Alert Rules</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-slate-200 text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                <th className="py-2 font-medium">Rule Type</th>
+                <th className="py-2 font-medium">Rule</th>
                 <th className="py-2 font-medium">Target</th>
-                <th className="py-2 text-right font-medium">Threshold</th>
+                <th className="py-2 text-right font-medium">Limit</th>
                 <th className="py-2 text-center font-medium">Status</th>
-                <th className="py-2 text-right font-medium">Action</th>
+                <th className="py-2 text-right font-medium">Remove</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {rules.map((r) => (
                 <tr key={r.id}>
-                  <td className="py-2.5 font-mono text-slate-900 dark:text-slate-100">{r.ruleType}</td>
+                  <td className="py-2.5 font-medium text-slate-900 dark:text-slate-100">
+                    {RULE_LABELS[r.ruleType] || r.ruleType}
+                  </td>
                   <td className="py-2.5 text-slate-700 dark:text-slate-300">{r.target}</td>
                   <td className="py-2.5 text-right font-mono tabular-nums">{r.threshold}</td>
                   <td className="py-2.5 text-center">

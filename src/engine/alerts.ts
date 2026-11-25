@@ -49,7 +49,7 @@ export function evaluateAlerts(
           ruleId: rule.id,
           severity: cryptoPct > rule.threshold + 8 ? 'High' : 'Warning',
           title: `Crypto weight (${cryptoPct.toFixed(1)}%) exceeds ${rule.threshold}% cap`,
-          detail: 'High-beta digital assets amplify portfolio tail risk. Review Optimizer tab for regime-aware rebalancing.',
+          detail: 'High-volatility crypto adds extra downside risk. Check the Rebalance tab for suggested limits.',
           metricValue: `${cryptoPct.toFixed(1)}%`,
         });
       }
@@ -152,27 +152,25 @@ export function buildPlainLanguageSummary(
   const regStrat = backtest.strategies.find((s) => s.name === 'Regime-Adjusted');
 
   const parts: string[] = [
-    `Your multi-asset portfolio is worth ${valStr} (${pnlStr} since purchase, XIRR ${xirrStr}).`,
-    `Annualized volatility is ${risk.annualizedVolPct.toFixed(1)}% (vs ${risk.weightedAvgVolPct.toFixed(1)}% un-diversified) with a 1-day 95% VaR of ${risk.historicalVar95Pct.toFixed(2)}% and CVaR of ${risk.cvar95Pct.toFixed(2)}%.`,
-    `The forward-filtered HMM classifies the NIFTY 50 regime as ${regime.currentRegime} (${regProb}% probability).`,
+    `Your portfolio is currently worth ${valStr} (${pnlStr} overall gain, ${xirrStr} annualized return) with ${risk.annualizedVolPct.toFixed(1)}% yearly volatility.`,
+    `Market conditions currently look ${regime.currentRegime} (${regProb}% confidence).`,
   ];
 
-  if (cryptoCapital > 0) {
+  if (cryptoCapital > 0 && cryptoRisk > cryptoCapital * 1.4) {
     parts.push(
-      `Crypto represents ${cryptoCapital.toFixed(1)}% of total wealth but drives ${cryptoRisk.toFixed(1)}% of liquid portfolio variance.`
+      `Crypto makes up ${cryptoCapital.toFixed(1)}% of your money, but drives ${cryptoRisk.toFixed(1)}% of your total risk.`
     );
   }
   if (optimization.trades.some((t) => t.action !== 'HOLD')) {
     parts.push(
-      `Regime-aware optimization suggests adjusting Crypto toward ${targetCrypto.toFixed(1)}% and Gold toward ${targetGold.toFixed(1)}% (currently ${goldCapital.toFixed(1)}%).`
+      `To balance risk and return, the Rebalance plan suggests moving Crypto toward ${targetCrypto.toFixed(1)}% and Gold toward ${targetGold.toFixed(1)}% (currently ${goldCapital.toFixed(1)}%).`
     );
   }
-  if (bhStrat && regStrat) {
+  if (bhStrat && regStrat && regStrat.maxDrawdownPct > bhStrat.maxDrawdownPct) {
     parts.push(
-      `Walk-forward backtest (after 0.15% tx/slippage): regime-adjusted allocation achieved ${regStrat.maxDrawdownPct.toFixed(1)}% max drawdown vs ${bhStrat.maxDrawdownPct.toFixed(1)}% buy-and-hold.`
+      `In historical testing, this balanced mix kept worst-case drops to ${regStrat.maxDrawdownPct.toFixed(1)}% compared to ${bhStrat.maxDrawdownPct.toFixed(1)}% for holding unchanged.`
     );
   }
-  parts.push('Educational decision-support analysis only — not SEBI-registered financial advice.');
 
   return parts.join(' ');
 }

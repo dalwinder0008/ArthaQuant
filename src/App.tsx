@@ -3,9 +3,7 @@ import { onAuthStateChanged, type User } from 'firebase/auth';
 import {
   Activity,
   Bell,
-  BookOpen,
   Briefcase,
-  GitBranch,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -13,7 +11,6 @@ import {
   RefreshCw,
   ShieldCheck,
   Sliders,
-  Sparkles,
   Sun,
   UserCog,
   X,
@@ -67,25 +64,18 @@ import {
 } from './lib/firebase.ts';
 import { AccountSettings } from './components/AccountSettings.tsx';
 import { AlertsPage } from './pages/AlertsPage.tsx';
-import { CorrelationPage } from './pages/CorrelationPage.tsx';
-import { InsightsPage } from './pages/InsightsPage.tsx';
-import { MethodologyPage } from './pages/MethodologyPage.tsx';
+import { AnalysisPage } from './pages/AnalysisPage.tsx';
 import { OptimizerPage } from './pages/OptimizerPage.tsx';
 import { OverviewPage, type NavTab } from './pages/OverviewPage.tsx';
 import { PortfolioPage } from './pages/PortfolioPage.tsx';
-import { RiskPage } from './pages/RiskPage.tsx';
 import { fetchMarketPayload, fetchNewsSentiment } from './services/marketApi.ts';
 
 const NAV_ITEMS: Array<{ id: NavTab; label: string; icon: React.ComponentType<{ className?: string }> }> = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { id: 'portfolio', label: 'Portfolio', icon: Briefcase },
-  { id: 'risk', label: 'Risk Analytics', icon: ShieldCheck },
-  { id: 'correlation', label: 'Correlation', icon: GitBranch },
-  { id: 'insights', label: 'AI Insights', icon: Sparkles },
-  { id: 'optimizer', label: 'Optimizer', icon: Sliders },
+  { id: 'portfolio', label: 'My Portfolio', icon: Briefcase },
+  { id: 'analysis', label: 'Risk & AI', icon: ShieldCheck },
+  { id: 'optimizer', label: 'Rebalance', icon: Sliders },
   { id: 'alerts', label: 'Alerts & Reports', icon: Bell },
-  { id: 'methodology', label: 'Methodology', icon: BookOpen },
-  { id: 'account', label: 'Account Settings', icon: UserCog },
 ];
 
 export default function App() {
@@ -188,7 +178,7 @@ export default function App() {
           if (migratedCount > 0) {
             localStorage.removeItem(GUEST_HOLDINGS_KEY);
             localStorage.removeItem(GUEST_MANUAL_KEY);
-            setSyncNotice(`Synced ${migratedCount} guest-session item${migratedCount === 1 ? '' : 's'} permanently to Firestore.`);
+            setSyncNotice(`Synced ${migratedCount} guest item${migratedCount === 1 ? '' : 's'} to your account.`);
           }
           setProfileReadyUid(u.uid);
         } catch (err) {
@@ -339,7 +329,7 @@ export default function App() {
     await signOutUser();
   };
 
-  // CRUD handlers (Firestore if signed in, local state in guest preview)
+  // CRUD handlers
   const handleAddHolding = async (input: Omit<Holding, 'id' | 'userId'>) => {
     if (user) {
       await createHoldingDoc(user.uid, input);
@@ -420,13 +410,14 @@ export default function App() {
     }
   };
 
-  const activeTitle = NAV_ITEMS.find((n) => n.id === activeTab)?.label || 'Overview';
+  const activeTitle =
+    activeTab === 'account' ? 'Account' : NAV_ITEMS.find((n) => n.id === activeTab)?.label || 'Overview';
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <div className="flex min-h-screen">
-        {/* Sidebar Navigation (Desktop) */}
-        <aside className="hidden w-64 shrink-0 flex-col border-r border-slate-200 bg-white lg:flex dark:border-slate-800 dark:bg-slate-900">
+        {/* Clean 5-Item Sidebar */}
+        <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-200 bg-white lg:flex dark:border-slate-800 dark:bg-slate-900">
           <div className="flex h-16 items-center border-b border-slate-200 px-5 dark:border-slate-800">
             <span className="font-display text-lg font-bold tracking-tight text-slate-900 whitespace-nowrap dark:text-slate-100">
               ArthaQuant
@@ -441,7 +432,7 @@ export default function App() {
                 <button
                   key={item.id}
                   onClick={() => setActiveTab(item.id)}
-                  className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-xs font-medium transition-colors whitespace-nowrap ${
+                  className={`flex w-full items-center justify-between rounded-md px-3 py-2.5 text-xs font-medium transition-colors whitespace-nowrap ${
                     isActive
                       ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
                       : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100'
@@ -461,16 +452,29 @@ export default function App() {
             })}
           </nav>
 
-          <div className="border-t border-slate-200 p-4 space-y-3 dark:border-slate-800">
+          <div className="border-t border-slate-200 p-3 space-y-2 dark:border-slate-800">
+            <button
+              onClick={() => setActiveTab('account')}
+              className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-xs font-medium transition-colors ${
+                activeTab === 'account'
+                  ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800'
+              }`}
+            >
+              <UserCog className="h-4 w-4 shrink-0" />
+              <span>Account</span>
+            </button>
+
             <button
               onClick={() => setDarkMode((d) => !d)}
               className="flex w-full items-center justify-between rounded-md border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
             >
-              <span>{darkMode ? 'Light Theme' : 'Dark Theme'}</span>
+              <span>{darkMode ? 'Light Mode' : 'Dark Mode'}</span>
               {darkMode ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
             </button>
-            <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-              Educational risk analytics only. Not SEBI-registered investment advice.
+
+            <p className="px-1 pt-1 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+              Educational analytics only. Not financial advice.
             </p>
           </div>
         </aside>
@@ -507,6 +511,20 @@ export default function App() {
                     </button>
                   );
                 })}
+                <button
+                  onClick={() => {
+                    setActiveTab('account');
+                    setMobileNavOpen(false);
+                  }}
+                  className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2.5 text-xs font-medium ${
+                    activeTab === 'account'
+                      ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+                      : 'text-slate-600 dark:text-slate-300'
+                  }`}
+                >
+                  <UserCog className="h-4 w-4" />
+                  <span>Account</span>
+                </button>
               </nav>
             </div>
           </div>
@@ -514,7 +532,7 @@ export default function App() {
 
         {/* Main Workspace */}
         <div className="flex min-w-0 flex-1 flex-col">
-          {/* Top Bar */}
+          {/* Clean Top Bar */}
           <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-4 border-b border-slate-200 bg-white px-4 sm:px-6 dark:border-slate-800 dark:bg-slate-900">
             <div className="flex items-center gap-3 min-w-0">
               <button
@@ -538,22 +556,16 @@ export default function App() {
                 className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 whitespace-nowrap shrink-0"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${marketLoading ? 'animate-spin' : ''}`} />
-                <span className="hidden sm:inline">Refresh Market</span>
+                <span className="hidden sm:inline">Refresh Prices</span>
               </button>
 
               {user ? (
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-2">
                   <button
                     onClick={() => setActiveTab('account')}
                     className="flex items-center gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
-                    title="Open Account Settings"
+                    title="Account Settings"
                   >
-                    <div className="hidden text-right sm:block">
-                      <div className="text-xs font-medium text-slate-900 dark:text-slate-100 truncate max-w-[140px]">
-                        {user.displayName || user.email}
-                      </div>
-                      <div className="text-[10px] text-emerald-700 dark:text-emerald-400">Account Settings</div>
-                    </div>
                     {user.photoURL && (
                       <img
                         src={user.photoURL}
@@ -562,13 +574,16 @@ export default function App() {
                         className="h-7 w-7 rounded-full border border-slate-200 dark:border-slate-700"
                       />
                     )}
+                    <span className="hidden text-xs font-medium text-slate-900 sm:inline dark:text-slate-100 truncate max-w-[130px]">
+                      {user.displayName || user.email}
+                    </span>
                   </button>
                   <button
                     onClick={handleSignOut}
                     className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 whitespace-nowrap shrink-0"
                   >
                     <LogOut className="h-3.5 w-3.5" />
-                    <span>Sign Out</span>
+                    <span className="hidden sm:inline">Sign Out</span>
                   </button>
                 </div>
               ) : (
@@ -590,11 +605,10 @@ export default function App() {
           </header>
 
           {/* Main Content Viewport */}
-          <main className="mx-auto w-full max-w-[1360px] flex-1 space-y-5 p-4 sm:p-6">
-            {/* Auth or Market Fallback Banners */}
+          <main className="mx-auto w-full max-w-[1320px] flex-1 space-y-5 p-4 sm:p-6">
             {authError && (
               <div className="flex items-center justify-between rounded-lg border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-200">
-                <span>Authentication notice: {authError}</span>
+                <span>Sign-in notice: {authError}</span>
                 <button onClick={() => setAuthError(null)} className="ml-3 font-semibold underline">
                   Dismiss
                 </button>
@@ -610,18 +624,11 @@ export default function App() {
               </div>
             )}
 
-            {rawMarket && rawMarket.sourceMode !== 'live' && (
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
-                <div className="flex items-center gap-2">
-                  <Activity className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-                  <span>
-                    {rawMarket.staleReason || 'Market cache active.'} · USD/INR:{' '}
-                    <span className="font-mono font-medium tabular-nums">₹{rawMarket.fxUsdinr.toFixed(2)}</span> · As of{' '}
-                    <span className="font-mono">{rawMarket.fetchedAt.slice(0, 16).replace('T', ' ')} UTC</span>
-                  </span>
-                </div>
-                <span className="font-mono text-[11px] text-slate-500">
-                  {user ? 'Synced to Firebase' : 'Guest Demo Portfolio'}
+            {rawMarket && rawMarket.sourceMode === 'cached-fallback' && (
+              <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+                <Activity className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                <span>
+                  Using offline market snapshot · USD/INR ₹{rawMarket.fxUsdinr.toFixed(2)}
                 </span>
               </div>
             )}
@@ -636,8 +643,8 @@ export default function App() {
             {(marketLoading || firestoreLoading || !summary || !risk || !correlation || !regime || !volatility || !optimization || !backtest) &&
             !marketError ? (
               <div className="space-y-4">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-                  {Array.from({ length: 5 }).map((_, i) => (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  {Array.from({ length: 4 }).map((_, i) => (
                     <div
                       key={i}
                       className="h-24 animate-pulse rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
@@ -684,10 +691,10 @@ export default function App() {
                       onDeleteManualAsset={handleDeleteManualAsset}
                     />
                   )}
-                  {activeTab === 'risk' && <RiskPage risk={risk} />}
-                  {activeTab === 'correlation' && <CorrelationPage correlation={correlation} />}
-                  {activeTab === 'insights' && (
-                    <InsightsPage
+                  {activeTab === 'analysis' && (
+                    <AnalysisPage
+                      risk={risk}
+                      correlation={correlation}
                       volTarget={volTarget}
                       onChangeVolTarget={setVolTarget}
                       volatility={volatility}
@@ -729,7 +736,6 @@ export default function App() {
                       }
                     />
                   )}
-                  {activeTab === 'methodology' && <MethodologyPage />}
                   {activeTab === 'account' && (
                     <AccountSettings
                       holdings={holdings}
